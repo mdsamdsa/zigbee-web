@@ -5,13 +5,15 @@ var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
+var log4js = require('log4js');
+log4js.configure('./log4js.json', {});
+
+var zgc = require('zigbee-gw-client');
+zgc.start();
+
 var routes = require('./routes/index');
 var users = require('./routes/users');
 var api = require('./routes/api');
-
-var zgw = require('zigbee-gw-client');
-
-zgw.start();
 
 var app = express();
 

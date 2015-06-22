@@ -1,0 +1,21 @@
+{
+    "appenders": [
+        {
+            "type": "console"
+        }
+    ],
+
+    "levels": {
+        "proxy":  "WARN",
+        "tcp_client":  "WARN",
+        "engine/local_device": "WARN",
+        "engine/network": "WARN",
+        "engine/network_device": "WARN",
+        "engine/group_scene": "WARN",
+        "engine/attribute": "WARN",
+        "machine/main": "INFO",
+        "machine/group": "INFO",
+        "machine/scene": "INFO",
+        "machine/attribute": "INFO"
+    }
+}
