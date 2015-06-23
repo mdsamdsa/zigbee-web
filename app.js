@@ -6,7 +6,7 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
 var log4js = require('log4js');
-//log4js.configure('./log4js.json', {});
+log4js.configure('./log4js.json', {});
 /*log4js.configure({
   appenders: [
     { type: 'console' },
@@ -14,8 +14,8 @@ var log4js = require('log4js');
   ]
 });*/
 
-var zgc = require('../zigbee-gw-client');
-zgc.start();
+var zgwc = require('zigbee-gw-client');
+zgwc.start();
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
