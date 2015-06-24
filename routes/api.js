@@ -3,13 +3,13 @@
 var when = require('when');
 
 var express = require('express');
-var zgw = require('zigbee-gw-client');
+var zgwc = require('zigbee-gw-client');
 
 var router = express.Router();
 
 function deviceToJson(device) {
     var res = {
-        ieeeAddress:    device.ieeeAddress.toString(),
+        ieeeAddress:    device.ieeeAddress.toString(16),
         shortAddress:   device.shortAddress,
         manufacturerId: device.manufacturerId,
         deviceStatus:   device.deviceStatus,
@@ -27,8 +27,21 @@ function endpointToJson(endpoint) {
         profileId:  endpoint.profileId,
         deviceId:   endpoint.deviceId,
         deviceVer:  endpoint.deviceVer,
+        groups: [],
         clusters: []
     };
+    for (var g = 0; g < endpoint.groups.length; g++) {
+        var group = {
+            groupId: endpoint.groups[g].groupId,
+            scenes: []
+        };
+        for (var s = 0; s < endpoint.groups[g].scenes.length; s++) {
+            group.scenes.push({
+                scenesId: endpoint.groups[g].scenes[s]
+            });
+        }
+        res.groups.push(group);
+    }
     for (var key in endpoint.clusters) {
         if (endpoint.clusters.hasOwnProperty(key) && !isNaN(parseInt(key))) {
             var cluster = endpoint.clusters[key];
@@ -69,21 +82,19 @@ router.route('/')
         });
     });
 
-router.route('/test')
-    .get(function(req, res) {
-        var obj = { z: 3 };
-        obj["name"] = 1;
-        obj[0] = 2;
-        res.json(obj)
-    });
+router.all('*', function(req, res, next) {
+    req.pan = zgwc.pan;
+    next();
+});
 
 router.param('ieeeAddress', function (req, res, next, ieeeAddress) {
-    var device = zgw.pan.getDevice(ieeeAddress);
+    var device = req.pan.getDevice(ieeeAddress);
     if (device) {
         req.device = device;
         next();
     } else {
         var err = new Error('Device not found');
+        err.status = 400;
         next(err);
     }
 });
@@ -103,6 +114,7 @@ router.param('endpointId', function (req, res, next, endpointId) {
             next();
         } else {
             err = new Error('Endpoint not found');
+            err.status = 400;
             next(err);
         }
     } else {
@@ -120,6 +132,7 @@ router.param('clusterId', function (req, res, next, clusterId) {
             next();
         } else {
             err = new Error('Cluster not found');
+            err.status = 400;
             next(err);
         }
     } else {
@@ -137,6 +150,7 @@ router.param('attributeId', function (req, res, next, attributeId) {
             next();
         } else {
             err = new Error('Attribute not found');
+            err.status = 400;
             next(err);
         }
     } else {
@@ -148,18 +162,18 @@ router.param('attributeId', function (req, res, next, attributeId) {
 router.route('/pan')
     .get(function(req, res) {
         res.json({
-            nwk_channel: zgw.pan.network.nwk_channel,
-            pan_id: zgw.pan.network.pan_id,
-            ext_pan_id: zgw.pan.network.ext_pan_id,
-            state: zgw.pan.network.state.value
+            nwk_channel: req.pan.network.nwk_channel,
+            pan_id: req.pan.network.pan_id,
+            ext_pan_id: req.pan.network.ext_pan_id,
+            state: req.pan.network.state.value
         });
     });
 
 router.route('/devices')
     .get(function(req, res) {
         var devices = [];
-        for(var i = 0; i < zgw.pan.devices.length; i++) {
-            var device = zgw.pan.devices[i];
+        for(var i = 0; i < req.pan.devices.length; i++) {
+            var device = req.pan.devices[i];
             devices.push(deviceToJson(device));
         }
         res.json(devices);
@@ -189,12 +203,52 @@ router.route('/endpoints/:ieeeAddress')
         }
     });
 
-router.route('/endpoints/:ieeeAddress/:endpointId')
+var routerEndpoint = express.Router({mergeParams:true});
+router.use('/endpoints/:ieeeAddress/:endpointId', routerEndpoint);
+
+routerEndpoint.route('/')
     .get(function(req, res, next) {
         if (req.endpoint) {
             res.json(endpointToJson(req.endpoint));
         } else {
             var err = new Error('Endpoint not found');
+            next(err);
+        }
+    });
+
+routerEndpoint.route('/commands')
+    .post(function(req, res, next) {
+        var err;
+        if (req.endpoint) {
+            if (typeof req.body.command == "string" && typeof req.body.params == "object") {
+                if (req.body.command.toLowerCase() == "addgroup") {
+                    when(req.endpoint.addGroup(req.body.params.groupId))
+                        .then(function () {
+                            res.json({result: "success"});
+                        })
+                        .catch(function (err) {
+                            res.json({result: "failed", err: err})
+                        });
+                } else if (req.body.command.toLowerCase() == "removegroup") {
+                    when(req.endpoint.removeGroup(req.body.params.groupId))
+                        .then(function () {
+                            res.json({result: "success"});
+                        })
+                        .catch(function (err) {
+                            res.json({result: "failed", err: err})
+                        });
+                } else {
+                    err = new Error('Command not supported');
+                    err.status = 405;
+                    next(err);
+                }
+            } else {
+                err = new Error('Command or params not found');
+                err.status = 400;
+                next(err);
+            }
+        } else {
+            err = new Error('Endpoint not found');
             next(err);
         }
     });
@@ -215,12 +269,40 @@ router.route('/clusters/:ieeeAddress/:endpointId')
         }
     });
 
-router.route('/clusters/:ieeeAddress/:endpointId/:clusterId')
+var routerCluster = express.Router({mergeParams:true});
+router.use('/clusters/:ieeeAddress/:endpointId/:clusterId', routerCluster);
+
+routerCluster.route('/')
     .get(function(req, res, next) {
         if (req.cluster) {
             res.json(clusterToJson(req.cluster));
         } else {
             var err = new Error('Cluster not found');
+            next(err);
+        }
+    });
+
+routerCluster.route('/commands')
+    .post(function(req, res, next) {
+        var err;
+        if (req.cluster) {
+            if (typeof req.body.command == "string" && typeof req.body.params == "object") {
+                if (typeof req.cluster.commands[req.body.command] == "function") {
+                    when(req.cluster.commands[req.body.command].call(/*req.body.command*/)) //TODO Add parameters
+                        .then(function () {
+                            res.json({result: "success"});
+                        })
+                        .catch(function (err) {
+                            res.json({result: "failed", err: err})
+                        });
+                }
+            } else {
+                err = new Error('Command or params not found');
+                err.status = 400;
+                next(err);
+            }
+        } else {
+            err = new Error('Cluster not found');
             next(err);
         }
     });
@@ -255,7 +337,7 @@ routerAttr.route('/')
     });
 
 routerAttr.route('/read')
-    .get(function(req, res, next) {
+    .post(function(req, res, next) {
         if (req.attribute) {
             when(req.attribute.read())
                 .then(function(val) {
