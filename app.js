@@ -5,9 +5,9 @@ var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
-var log4js = require('log4js');
-log4js.configure('./log4js.json', {});
-/*log4js.configure({
+var Logger = require('./logger');
+Logger.configure('./log4js.json', {});
+/*Logger.configure({
   appenders: [
     { type: 'console' },
     { type: 'file', filename: 'logs/connect.log', category: 'app' }
@@ -29,8 +29,8 @@ app.set('view engine', 'jade');
 
 // uncomment after placing your favicon in /public
 //app.use(favicon(__dirname + '/public/favicon.ico'));
-app.use(logger('dev'));
-//app.use(log4js.connectLogger(log4js.getLogger('app'), { level: 'auto', format: ':method :url :status :response-time ms - :content-length' }));
+//app.use(logger('dev'));
+app.use(Logger.connectLogger(Logger.getLogger('app'), { level: 'auto', format: ':method :url :status :response-time ms - :content-length' }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
