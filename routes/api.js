@@ -1,5 +1,7 @@
 'use strict';
 
+var when = require('when');
+
 var express = require('express');
 var zgw = require('zigbee-gw-client');
 
@@ -62,8 +64,86 @@ function attributeToJson(attribute) {
 
 router.route('/')
     .get(function(req, res) {
-        res.redirect('/api/pan');
+        res.json({
+            version: "1.0"
+        });
     });
+
+router.route('/test')
+    .get(function(req, res) {
+        var obj = { z: 3 };
+        obj["name"] = 1;
+        obj[0] = 2;
+        res.json(obj)
+    });
+
+router.param('ieeeAddress', function (req, res, next, ieeeAddress) {
+    var device = zgw.pan.getDevice(ieeeAddress);
+    if (device) {
+        req.device = device;
+        next();
+    } else {
+        var err = new Error('Device not found');
+        next(err);
+    }
+});
+
+router.param('endpointId', function (req, res, next, endpointId) {
+    var err;
+    if (req.device) {
+        var endpoint;
+        for (var i = 0; i < req.device.endpoints.length; i++) {
+            if (req.device.endpoints[i].endpointId == endpointId) {
+                endpoint = req.device.endpoints[i];
+                break
+            }
+        }
+        if (endpoint) {
+            req.endpoint = endpoint;
+            next();
+        } else {
+            err = new Error('Endpoint not found');
+            next(err);
+        }
+    } else {
+        err = new Error('Device not found');
+        next(err);
+    }
+});
+
+router.param('clusterId', function (req, res, next, clusterId) {
+    var err;
+    if (req.endpoint) {
+        var cluster = req.endpoint.clusters[clusterId];
+        if (cluster) {
+            req.cluster = cluster;
+            next();
+        } else {
+            err = new Error('Cluster not found');
+            next(err);
+        }
+    } else {
+        err = new Error('Endpoint not found');
+        next(err);
+    }
+});
+
+router.param('attributeId', function (req, res, next, attributeId) {
+    var err;
+    if (req.cluster) {
+        var attribute = req.cluster.attributes[attributeId];
+        if (attribute) {
+            req.attribute = attribute;
+            next();
+        } else {
+            err = new Error('Attribute not found');
+            next(err);
+        }
+    } else {
+        err = new Error('Cluster not found');
+        next(err);
+    }
+});
 
 router.route('/pan')
     .get(function(req, res) {
@@ -87,9 +167,22 @@ router.route('/devices')
 
 router.route('/devices/:ieeeAddress')
     .get(function(req, res, next) {
-        var device = zgw.pan.getDevice(req.params.ieeeAddress);
-        if (device) {
-            res.json(deviceToJson(device));
+        if (req.device) {
+            res.json(deviceToJson(req.device));
+        } else {
+            var err = new Error('Device not found');
+            next(err);
+        }
+    });
+
+router.route('/endpoints/:ieeeAddress')
+    .get(function(req, res, next) {
+        if (req.device) {
+            var endpoints = [];
+            for (var i = 0; i < req.device.endpoints.length; i++) {
+                endpoints.push(endpointToJson(req.device.endpoints[i]));
+            }
+            res.json(endpoints);
         } else {
             var err = new Error('Device not found');
             next(err);
@@ -98,9 +191,24 @@ router.route('/devices/:ieeeAddress')
 
 router.route('/endpoints/:ieeeAddress/:endpointId')
     .get(function(req, res, next) {
-        var endpoint = zgw.pan.getEndpoint(req.params.ieeeAddress, req.params.endpointId);
-        if (endpoint) {
-            res.json(endpointToJson(endpoint));
+        if (req.endpoint) {
+            res.json(endpointToJson(req.endpoint));
+        } else {
+            var err = new Error('Endpoint not found');
+            next(err);
+        }
+    });
+
+router.route('/clusters/:ieeeAddress/:endpointId')
+    .get(function(req, res, next) {
+        if (req.endpoint) {
+            var clusters = [];
+            for (var key in req.endpoint.clusters) {
+                if (req.endpoint.clusters.hasOwnProperty(key) && !isNaN(parseInt(key))) {
+                    clusters.push(clusterToJson(req.endpoint.clusters[key]));
+                }
+            }
+            res.json(clusters);
         } else {
             var err = new Error('Endpoint not found');
             next(err);
@@ -109,9 +217,8 @@ router.route('/endpoints/:ieeeAddress/:endpointId')
 
 router.route('/clusters/:ieeeAddress/:endpointId/:clusterId')
     .get(function(req, res, next) {
-        var cluster = zgw.pan.getCluster(req.params.ieeeAddress, req.params.endpointId, req.params.clusterId);
-        if (cluster) {
-            res.json(clusterToJson(cluster));
+        if (req.cluster) {
+            res.json(clusterToJson(req.cluster));
         } else {
             var err = new Error('Cluster not found');
             next(err);
@@ -120,12 +227,11 @@ router.route('/clusters/:ieeeAddress/:endpointId/:clusterId')
 
 router.route('/attributes/:ieeeAddress/:endpointId/:clusterId')
     .get(function(req, res, next) {
-        var cluster = zgw.pan.getCluster(req.params.ieeeAddress, req.params.endpointId, req.params.clusterId);
-        if (cluster) {
+        if (req.cluster) {
             var attributes = [];
-            for (var key in cluster.attributes) {
-                if (cluster.attributes.hasOwnProperty(key) && !isNaN(parseInt(key))) {
-                    attributes.push(attributeToJson(cluster.attributes[key]));
+            for (var key in req.cluster.attributes) {
+                if (req.cluster.attributes.hasOwnProperty(key) && !isNaN(parseInt(key))) {
+                    attributes.push(attributeToJson(req.cluster.attributes[key]));
                 }
             }
             res.json(attributes);
@@ -135,13 +241,54 @@ router.route('/attributes/:ieeeAddress/:endpointId/:clusterId')
         }
     });
 
-router.route('/attributes/:ieeeAddress/:endpointId/:clusterId/:attributeId')
+var routerAttr = express.Router({mergeParams:true});
+router.use('/attributes/:ieeeAddress/:endpointId/:clusterId/:attributeId', routerAttr);
+
+routerAttr.route('/')
     .get(function(req, res, next) {
-        var attribute = zgw.pan.getAttribute(req.params.ieeeAddress, req.params.endpointId, req.params.clusterId, req.params.attributeId);
-        if (attribute) {
-            res.json(attributeToJson(attribute));
+        if (req.attribute) {
+            res.json(attributeToJson(req.attribute));
         } else {
             var err = new Error('Attribute not found');
+            next(err);
+        }
+    });
+
+routerAttr.route('/read')
+    .get(function(req, res, next) {
+        if (req.attribute) {
+            when(req.attribute.read())
+                .then(function(val) {
+                    res.json({result: "success", value: val});
+                })
+                .catch(function(err) {
+                    res.json({result: "failed", err: err})
+                });
+        } else {
+            var err = new Error('Attribute not found');
+            next(err);
+        }
+    });
+
+routerAttr.route('/write')
+    .post(function(req, res, next) {
+        var err;
+        if (req.attribute) {
+            if (typeof req.body.value != "undefined") {
+                when(req.attribute.write(req.body.value))
+                    .then(function (val) {
+                        res.json({result: "success", value: val});
+                    })
+                    .catch(function (err) {
+                        res.json({result: "failed", err: err})
+                    });
+            } else {
+                err = new Error('Value not found');
+                err.status = 400;
+                next(err);
+            }
+        } else {
+            err = new Error('Attribute not found');
             next(err);
         }
     });
@@ -153,7 +300,7 @@ router.route('/attributes/:ieeeAddress/:endpointId/:clusterId/:attributeId')
         next(err);
     });
 
-    router.use(function (err, req, res) {
+    router.use(function (err, req, res, next) {
         res.status(err.status || 500);
         res.json({message: err.message});
     });
