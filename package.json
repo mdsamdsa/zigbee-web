@@ -14,6 +14,11 @@
     "morgan": "~1.5.3",
     "serve-favicon": "~2.2.1",
     "when": "*",
-    "log4js": "*"
+    "log4js": "*",
+    "unirest": "*"
+  },
+  "devDependencies": {
+    "unirest": "*",
+    "colors": "*"
   }
 }

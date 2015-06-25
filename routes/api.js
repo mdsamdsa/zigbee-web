@@ -237,6 +237,22 @@ routerEndpoint.route('/commands')
                         .catch(function (err) {
                             res.json({result: "failed", err: err})
                         });
+                } else if (req.body.command.toLowerCase() == "storescene") {
+                    when(req.endpoint.storeScene(req.body.params.groupId, req.body.params.sceneId))
+                        .then(function () {
+                            res.json({result: "success"});
+                        })
+                        .catch(function (err) {
+                            res.json({result: "failed", err: err})
+                        });
+                } else if (req.body.command.toLowerCase() == "removescene") {
+                    when(req.endpoint.removeScene(req.body.params.groupId, req.body.params.sceneId))
+                        .then(function () {
+                            res.json({result: "success"});
+                        })
+                        .catch(function (err) {
+                            res.json({result: "failed", err: err})
+                        });
                 } else {
                     err = new Error('Command not supported');
                     err.status = 405;
@@ -288,7 +304,7 @@ routerCluster.route('/commands')
         if (req.cluster) {
             if (typeof req.body.command == "string" && typeof req.body.params == "object") {
                 if (typeof req.cluster.commands[req.body.command] == "function") {
-                    when(req.cluster.commands[req.body.command].call(/*req.body.command*/)) //TODO Add parameters
+                    when(req.cluster.commands[req.body.command].call(/*req.body.params*/)) //TODO Add parameters
                         .then(function () {
                             res.json({result: "success"});
                         })
@@ -382,7 +398,8 @@ routerAttr.route('/write')
         next(err);
     });
 
-    router.use(function (err, req, res, next) {
+    //noinspection JSUnusedLocalSymbols
+router.use(function (err, req, res, next) {
         res.status(err.status || 500);
         res.json({message: err.message});
     });
