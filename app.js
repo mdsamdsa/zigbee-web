@@ -14,6 +14,12 @@ Logger.configure('./log4js.json', {});
   ]
 });*/
 
+/*var blocked = require('blocked');
+
+blocked(function(ms){
+  console.log('BLOCKED FOR %sms', ms | 0);
+});*/
+
 var zgwc = require('zigbee-gw-client');
 zgwc.start();
 
